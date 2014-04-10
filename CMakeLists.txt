@@ -142,6 +142,9 @@ ADD_CUSTOM_TARGET (ns_dialyzer_obsessive
   WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}" VERBATIM)
 ADD_DEPENDENCIES (ns_dialyzer_obsessive ns_server)
 
+# Generate python wrapper
+CONFIGURE_FILE (${CMAKE_CURRENT_SOURCE_DIR}/cbcollect_info_wrapper
+                ${CMAKE_CURRENT_BINARY_DIR}/wrapper/cbcollect_info)
 #
 # Install
 #
@@ -150,12 +153,19 @@ INSTALL (DIRECTORY priv/public DESTINATION "${INST_LIBDIR}/ns_server/priv")
 INSTALL (PROGRAMS priv/i386-linux-godu priv/i386-win32-godu.exe
   DESTINATION "${INST_LIBDIR}/ns_server/priv")
 
+# cbcollect_info, wrapper and dependancies
+INSTALL (PROGRAMS
+         cbcollect_info
+         DESTINATION lib/python)
+INSTALL (PROGRAMS
+         ${CMAKE_CURRENT_BINARY_DIR}/wrapper/cbcollect_info
+         DESTINATION bin)
 INSTALL (DIRECTORY
          deps/requests
          DESTINATION lib/python)
 
 
-INSTALL (PROGRAMS cbbrowse_logs cbcollect_info cbreset_password DESTINATION bin)
+INSTALL (PROGRAMS cbbrowse_logs cbreset_password DESTINATION bin)
 INSTALL (PROGRAMS scripts/cbdump-config scripts/dump-guts DESTINATION bin)
 
 # Configure custom copies of scripts for installation
