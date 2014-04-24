@@ -150,6 +150,11 @@ INSTALL (DIRECTORY priv/public DESTINATION "${INST_LIBDIR}/ns_server/priv")
 INSTALL (PROGRAMS priv/i386-linux-godu priv/i386-win32-godu.exe
   DESTINATION "${INST_LIBDIR}/ns_server/priv")
 
+INSTALL (DIRECTORY
+         deps/requests
+         DESTINATION lib/python)
+
+
 INSTALL (PROGRAMS cbbrowse_logs cbcollect_info cbreset_password DESTINATION bin)
 INSTALL (PROGRAMS scripts/cbdump-config scripts/dump-guts DESTINATION bin)
 
