@@ -145,7 +145,11 @@ terminate(_Reason, _State) ->
 % Start collecting logs
 start_log_collection(Nodes, Upload, State) ->
     ?log_info("Nodes: ~p Upload: ~p~n", [Nodes, Upload]),
-    Children = [ {N, collect_logs_node:start_link(N, Upload)} || N <- Nodes],
+    Timestamp = misc:iso_8601_fmt(erlang:localtime()),
+    Children = [{N, collect_logs_node:start_link(N,
+                                                  Upload,
+                                                  Timestamp)}
+                || N <- Nodes],
     % Verify all children started successfully
     AllSuccess = lists:all(fun({_Node, {ok, _Pid}}) -> true;
                                (_)                  -> false
@@ -520,15 +524,23 @@ single_node_upload(_) ->
     Result = collect_logs_manager:begin_collection( [node()], Opts),
     WaitResult = wait_for_status(idle, 1000),
     Status = collect_logs_manager:get_status(),
-    ExpectedURL = list_to_bitstring("https://host.domain/Example_inc./12345/"
-                                    ++ atom_to_list(node()) ++ ".zip"),
+    ExpectedPrefix = "https://host.domain/Example_inc./12345/",
+    ExpectedSuffix = atom_to_list(node()) ++ ".zip",
+    NodeDetails = proplists:get_value(nodes, Status),
+    Artifact = bitstring_to_list(proplists:get_value(artifact,
+                                                     lists:nth(1, NodeDetails))),
     [?_assertEqual(in_progress, Result),
      ?_assertEqual({ok, idle}, WaitResult),
      ?_assertEqual(idle, proplists:get_value(status, Status)),
-     ?_assertMatch([[{node_name, _},
-                     {result, <<"uploaded">>},
-                     {artifact, ExpectedURL}]],
-         proplists:get_value(nodes, Status))].
+     ?_assertMatch([[{node_name, _}, {result, <<"uploaded">>}, {artifact, _}]],
+                   NodeDetails),
+     % Check the artifact has the correct prefix and suffix (we ignore the
+     % timestamp in the middle).
+     ?_assert(string:equal(ExpectedPrefix,
+                           string:substr(Artifact, 1, string:len(ExpectedPrefix)))),
+     ?_assert(string:equal(lists:reverse(ExpectedSuffix),
+                           string:substr(lists:reverse(Artifact), 1,
+                                         string:len(ExpectedSuffix))))].
 
 single_node_upload_no_ticket(_) ->
     Opts = enable_cbcollect_mock()
@@ -537,14 +549,22 @@ single_node_upload_no_ticket(_) ->
     Result = collect_logs_manager:begin_collection( [node()], Opts),
     WaitResult = wait_for_status(idle, 1000),
     Status = collect_logs_manager:get_status(),
-    ExpectedURL = list_to_bitstring("https://host.domain/Example_inc./"
-                                    ++ atom_to_list(node()) ++ ".zip"),
+    ExpectedPrefix = "https://host.domain/Example_inc./",
+    ExpectedSuffix = atom_to_list(node()) ++ ".zip",
+    NodeDetails = proplists:get_value(nodes, Status),
+    Artifact = bitstring_to_list(proplists:get_value(artifact,
+                                 lists:nth(1, NodeDetails))),
     [?_assertEqual(in_progress, Result),
      ?_assertEqual({ok, idle}, WaitResult),
-     ?_assertMatch([[{node_name, _},
-                     {result, <<"uploaded">>},
-                     {artifact, ExpectedURL}]],
-                   proplists:get_value(nodes, Status))].
+     ?_assertMatch([[{node_name, _}, {result, <<"uploaded">>}, {artifact, _}]],
+                   NodeDetails),
+     % Check the artifact has the correct prefix and suffix (we ignore the
+     % timestamp in the middle).
+        ?_assert(string:equal(ExpectedPrefix,
+                 string:substr(Artifact, 1, string:len(ExpectedPrefix)))),
+        ?_assert(string:equal(lists:reverse(ExpectedSuffix),
+                 string:substr(lists:reverse(Artifact), 1,
+                               string:len(ExpectedSuffix))))].
 
 cbcollect_upload(_) ->
     Opts = enable_cbcollect_mock()
@@ -704,7 +724,8 @@ enable_cbcollect_mock(collect) ->
 
 %% Returns options to run using a mock cbcollect_info.
 enable_cbcollect_mock() ->
-    [{bin_dir, "test"},
+    {ok, Cwd} = file:get_cwd(),
+    [{bin_dir, filename:join(Cwd, "test")},
      {cbcollect_name, "cbcollect_info_mock"}].
 
 %% Waits for the status of collect_logs_manager to become the specified Status;

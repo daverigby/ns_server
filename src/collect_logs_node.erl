@@ -45,12 +45,12 @@
 %% ====================================================================
 %% API functions
 %% ====================================================================
--export([start_link/2, cancel/1, collect/1]).
+-export([start_link/3, cancel/1, collect/1]).
 
 %% Start the server on the given node, with the given Upload options.
-start_link(Node, Upload) ->
+start_link(Node, Upload, Timestamp) ->
     case rpc:call(Node, gen_server, start,
-                  [{local, ?MODULE}, ?MODULE, [Upload], []]) of
+                  [{local, ?MODULE}, ?MODULE, [Upload, Timestamp], []]) of
         {ok, Pid} ->
             true = link(Pid),
             {ok, Pid};
@@ -76,21 +76,23 @@ collect(Pid) ->
                 port,        % port for cbcollect_info external process.
                 manager,     % pid of manager process to reply to when we complete.
                 upload=[],   % proplist of upload options.
-                result=[]}). % proplist of result of the collection.
+                result=[],   % proplist of result of the collection.
+                timestamp}). % timestamp to prepend to zip file name.
 
 
-init([Upload]) ->
+
+init([Upload, TimeStamp]) ->
     process_flag(trap_exit, true),
-    State = #state{status = idle, upload=Upload},
+    State = #state{status = idle, upload=Upload, timestamp=TimeStamp},
     {ok, State}.
 
 handle_call(cancel, _From, State) ->
     {stop, normal, cancelled, State};
 
-handle_call(collect, {FromPid, _Tag}, State=#state{status = idle, upload=Upload}) ->
+handle_call(collect, {FromPid, _Tag}, State = #state{status = idle}) ->
     %% Start the external cbcollect_info process.
     try
-        Port = run_cbcollect_info(Upload),
+        Port = run_cbcollect_info(State),
         {reply, collecting, State#state{status = collecting,
                                         manager=FromPid,
                                         port=Port}}
@@ -160,19 +162,25 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal functions
 %% ====================================================================
 
-run_cbcollect_info(Upload) ->
+run_cbcollect_info(#state{upload = Upload} = State) ->
     Cmd = get_cbcollect_exe(Upload),
-    Args = format_cbcollect_args(Upload),
-    ?log_debug("spawning ~p with args ~p~n", [Cmd, Args]),
+    Args = format_cbcollect_args(State),
+    JoinedArgs = lists:foldl(fun(X, Acc) -> Acc ++ " " ++ X end, "", Args),
+    TmpDir = misc:find_writable_tempdir(),
+    ?log_debug("spawning ~p in cwd ~p with args:~s~n", [Cmd, TmpDir, JoinedArgs]),
     open_port({spawn_executable, Cmd},
-              [exit_status, {args, Args}, {line, 1024}, binary, use_stdio,
-               stderr_to_stdout]).
+              [exit_status,
+               {args, Args},
+               {line, 1024},
+               {cd, TmpDir},
+               binary, use_stdio]).
 
 %% Returns a list of arguments to pass to cbcollect_info based on the Upload
 %% arguments
-format_cbcollect_args(false) ->
-    ["--script"] ++ [ atom_to_list(node()) ++ ".zip" ];
-format_cbcollect_args(Upload) when is_list(Upload) ->
+format_cbcollect_args(#state{upload = Upload} = State) when Upload =:= false ->
+    ["--script"]
+    ++ [State#state.timestamp ++ "-" ++ atom_to_list(node()) ++ ".zip"];
+format_cbcollect_args(#state{upload = Upload} = State) when is_list(Upload) ->
     Opts = case proplists:get_value(host, Upload) of
                undefined -> [];
                Host      -> ["--upload", "--upload-host=" ++ binary_to_list(Host)]
@@ -190,7 +198,8 @@ format_cbcollect_args(Upload) when is_list(Upload) ->
            undefined -> [];
            Extra     -> Extra
     end,
-    ["--script"] ++ Opts ++ [ atom_to_list(node()) ++ ".zip" ].
+    ["--script"] ++ Opts
+    ++ [State#state.timestamp ++ "-" ++ atom_to_list(node()) ++ ".zip"].
 
 
 %% Return the path of the cbcollect executable.
