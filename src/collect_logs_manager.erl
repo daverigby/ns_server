@@ -150,10 +150,16 @@ start_log_collection(Nodes, Upload, State) ->
                                                   Upload,
                                                   Timestamp)}
                 || N <- Nodes],
-    % Verify all children started successfully
+    % Filter children to those nodes which could positively be contacted.
+    % In the case of badrpc (i.e. note unreachible) we *don't* block log
+    % %% collection because as far as we know we may never see that node again.
+    AccessibleNodes = lists:filter(fun ({_Node, {badrpc, nodedown}}) -> false;
+                                       ({_Node, {ok, _Pid}})         -> true;
+                                       (_)                           -> false
+                                   end, Children),
     AllSuccess = lists:all(fun({_Node, {ok, _Pid}}) -> true;
                                (_)                  -> false
-                           end, Children),
+                           end, AccessibleNodes),
     case AllSuccess of
         true ->
             ChildIDs = [ [{name, Node}, {pid, Pid}] || {Node, {ok, Pid}} <- Children],
@@ -439,7 +445,9 @@ multi_collect_test_() ->
     {"Ensure multiple nodes can start and complete successfully",
         {setup, fun start_distrib/0, fun stop_distrib/1, fun multi_collect/1}}.
 
-
+multi_collect_node_down_test_() ->
+    {"Ensure multiple nodes can start when a node is down",
+        {setup, fun start_distrib/0, fun stop_distrib/1, fun multi_collect_node_down/1}}.
 
 
 %% Setup functions ====================================================
@@ -668,7 +676,6 @@ multi_begin_cancel(Slaves) ->
     WaitResult = wait_for_status(in_progress, 1000),
     Result2 = collect_logs_manager:cancel_collection(),
     Status = collect_logs_manager:get_status(),
-    ?log_debug("Status: ~p~n", [Status]),
     [?_assertEqual(in_progress, Result1),
      ?_assertEqual({ok, in_progress}, WaitResult),
      ?_assertEqual(ok, Result2),
@@ -684,6 +691,20 @@ multi_collect(Slaves) ->
      ?_assertEqual({ok, idle}, WaitResult),
      ?_assertMatch([[{node_name,_}, {result,<<"collected">>}, {artifact,_}],
                     [{node_name,_}, {result,<<"collected">>}, {artifact,_}],
+                    [{node_name,_}, {result,<<"collected">>}, {artifact,_}]],
+                   proplists:get_value(nodes, Status))].
+
+multi_collect_node_down(Slaves) ->
+    Opts = enable_cbcollect_mock(collect),
+    [Head | _Tail] = Slaves,
+    ok = slave:stop(Head),
+    Nodes = [node() | Slaves],
+    Result1 = collect_logs_manager:begin_collection( Nodes, Opts),
+    WaitResult = wait_for_status(idle, 1000),
+    Status = collect_logs_manager:get_status(),
+    [?_assertEqual(in_progress, Result1),
+     ?_assertEqual({ok, idle}, WaitResult),
+     ?_assertMatch([[{node_name,_}, {result,<<"collected">>}, {artifact,_}],
                     [{node_name,_}, {result,<<"collected">>}, {artifact,_}]],
                    proplists:get_value(nodes, Status))].
 
