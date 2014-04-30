@@ -10,11 +10,12 @@ import re
 import platform
 import glob
 import socket
-import requests
 import signal
 import thread
 from threading import Thread
 import urlparse
+import mmap
+import urllib2
 
 USAGE = """usage: %prog [options] output_file.zip
 
@@ -66,6 +67,13 @@ class TempFile(object):
             pass
 
         self.unlink(self.name)
+
+
+class PutRequest(urllib2.Request):
+    """Subclass of urllib2.Request for HTTP 'PUT' requests."""
+
+    def get_method(self):
+        return 'PUT'
 
 
 class Task(object):
@@ -187,18 +195,19 @@ class TaskRunner(object):
         result = {}
         try:
             with open(zip_filename) as f:
-                r = requests.put(url, data=f, verify=False)
-                r.raise_for_status()
+                mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+                opener = urllib2.build_opener(urllib2.HTTPHandler)
+                request = PutRequest(url, data=mm)
+                request.add_header('Content-Type', 'application/zip')
+                res = opener.open(request)
                 result['error'] = False
-        except requests.exceptions.ConnectionError as e:
+        except urllib2.URLError as e:
             result['error'] = True
-            result['details'] = "Connection Error (%s). Please check the hostname is correct and ensure the system has access to that host." % e
-        except requests.exceptions.HTTPError as e:
+            result['details'] = "Error uploading to '%s' : %s" % (url, e.reason)
+        except urllib2.HTTPError as e:
             result['error'] = True
-            result['details'] = "Error status code received from webserver: %s"  % r.status_code
-        except:
-            result['error'] = True
-            result['details'] = "Unknown error: %s" % e
+            result['details'] = "HTTP error %s received from server: %s" % (e.code, e.reason)
+
         return result
 
 

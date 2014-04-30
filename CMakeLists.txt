@@ -142,9 +142,6 @@ ADD_CUSTOM_TARGET (ns_dialyzer_obsessive
   WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}" VERBATIM)
 ADD_DEPENDENCIES (ns_dialyzer_obsessive ns_server)
 
-# Generate python wrapper
-CONFIGURE_FILE (${CMAKE_CURRENT_SOURCE_DIR}/cbcollect_info_wrapper
-                ${CMAKE_CURRENT_BINARY_DIR}/wrapper/cbcollect_info)
 #
 # Install
 #
