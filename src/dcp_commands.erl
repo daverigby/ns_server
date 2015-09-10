@@ -122,6 +122,8 @@ command_2_atom(?DCP_SNAPSHOT_MARKER) ->
     dcp_snapshot_marker;
 command_2_atom(?DCP_MUTATION) ->
     dcp_mutation;
+command_2_atom(?DCP_DELTA_MUTATION) ->
+    dcp_delta_mutation;
 command_2_atom(?DCP_DELETION) ->
     dcp_deletion;
 command_2_atom(?DCP_EXPIRATION) ->

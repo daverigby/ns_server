@@ -188,6 +188,7 @@
 %% window update is officially called "buffer acknowledgement"
 -define(DCP_WINDOW_UPDATE,         16#5d).
 -define(DCP_CONTROL,               16#5e).
+-define(DCP_DELTA_MUTATION,        16#5f).
 
 %% datatypes enum
 -define(MC_DATATYPE_RAW_BYTES,      16#00).

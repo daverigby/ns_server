@@ -132,6 +132,8 @@ handle_packet(<<Magick:8, Opcode:8, _Rest/binary>> = Packet,
 
 suppress_logging(<<?REQ_MAGIC:8, ?DCP_MUTATION:8, _Rest/binary>>) ->
     true;
+suppress_logging(<<?REQ_MAGIC:8, ?DCP_DELTA_MUTATION:8, _Rest/binary>>) ->
+    true;
 suppress_logging(<<?REQ_MAGIC:8, ?DCP_DELETION:8, _Rest/binary>>) ->
     true;
 suppress_logging(<<?REQ_MAGIC:8, ?DCP_SNAPSHOT_MARKER, _Rest/binary>>) ->
@@ -139,6 +141,9 @@ suppress_logging(<<?REQ_MAGIC:8, ?DCP_SNAPSHOT_MARKER, _Rest/binary>>) ->
 suppress_logging(<<?REQ_MAGIC:8, ?DCP_WINDOW_UPDATE, _Rest/binary>>) ->
     true;
 suppress_logging(<<?RES_MAGIC:8, ?DCP_MUTATION:8, _KeyLen:16, _ExtLen:8,
+                   _DataType:8, ?SUCCESS:16, _Rest/binary>>) ->
+    true;
+suppress_logging(<<?RES_MAGIC:8, ?DCP_DELTA_MUTATION:8, _KeyLen:16, _ExtLen:8,
                    _DataType:8, ?SUCCESS:16, _Rest/binary>>) ->
     true;
 suppress_logging(<<?RES_MAGIC:8, ?DCP_DELETION:8, _KeyLen:16, _ExtLen:8,
