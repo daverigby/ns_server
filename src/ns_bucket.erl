@@ -60,6 +60,7 @@
          ram_quota/1,
          conflict_resolution_type/1,
          drift_thresholds/1,
+         storage_mode/1,
          raw_ram_quota/1,
          sasl_password/1,
          set_bucket_config/2,
@@ -118,6 +119,7 @@ config_string(BucketName) ->
                 EvictionPolicy = proplists:get_value(eviction_policy, BucketConfig, value_only),
                 ConflictResolutionType = conflict_resolution_type(BucketConfig),
                 DriftThresholds = drift_thresholds(BucketConfig),
+                StorageMode = storage_mode(BucketConfig),
                 %% MemQuota is our per-node bucket memory limit
                 CFG =
                     io_lib:format(
@@ -127,7 +129,8 @@ config_string(BucketName) ->
                       "backend=couchdb;couch_bucket=~s;max_vbuckets=~B;"
                       "alog_path=~s;data_traffic_enabled=false;max_num_workers=~B;"
                       "uuid=~s;item_eviction_policy=~s;"
-                      "conflict_resolution_type=~s",
+                      "conflict_resolution_type=~s;"
+                      "bucket_type=~s",
                       [proplists:get_value(
                          ht_size, BucketConfig,
                          misc:getenv_int("MEMBASE_HT_SIZE", 3079)),
@@ -142,7 +145,8 @@ config_string(BucketName) ->
                        NumThreads,
                        BucketUUID,
                        EvictionPolicy,
-                       ConflictResolutionType]),
+                       ConflictResolutionType,
+                       storage_mode_to_bucket_type(StorageMode)]),
                 {CFG, {MemQuota, DBSubDir, NumThreads, EvictionPolicy,
                        DriftThresholds}, DBSubDir};
             memcached ->
@@ -240,6 +244,15 @@ drift_thresholds(BucketConfig) ->
         seqno ->
             undefined
     end.
+
+-spec storage_mode([{_,_}]) -> atom().
+storage_mode(BucketConfig) ->
+    proplists:get_value(storage_mode, BucketConfig).
+
+storage_mode_to_bucket_type(couchstore) ->
+    persistent;
+storage_mode_to_bucket_type(ephemeral) ->
+    ephemeral.
 
 %% returns bucket ram quota multiplied by number of nodes this bucket
 %% resides on. I.e. gives amount of ram quota that will be used by

@@ -194,6 +194,7 @@ build_bucket_info(Id, BucketConfig, InfoLevel, LocalAddr, MayExposeAuth,
         end,
 
     ConflictResolutionType = ns_bucket:conflict_resolution_type(BucketConfig),
+    StorageMode = ns_bucket:storage_mode(BucketConfig),
 
     Suffix = case InfoLevel of
                  streaming ->
@@ -217,7 +218,8 @@ build_bucket_info(Id, BucketConfig, InfoLevel, LocalAddr, MayExposeAuth,
                                             {rawRAM, ns_bucket:raw_ram_quota(BucketConfig)}]}},
                           {basicStats, {struct, BasicStats}},
                           {evictionPolicy, EvictionPolicy},
-                          {conflictResolutionType, ConflictResolutionType}
+                          {conflictResolutionType, ConflictResolutionType},
+                          {storageMode, StorageMode}
                           | BucketCaps],
 
                      case ns_bucket:drift_thresholds(BucketConfig) of
@@ -422,7 +424,8 @@ extract_bucket_props(BucketId, Props) ->
                                                                      flush_enabled, num_threads, eviction_policy,
                                                                      conflict_resolution_type,
                                                                      drift_ahead_threshold_ms,
-                                                                     drift_behind_threshold_ms]],
+                                                                     drift_behind_threshold_ms,
+                                                                     storage_mode]],
                            X =/= false],
     case BucketId of
         "default" -> lists:keyreplace(auth_type, 1,
@@ -805,7 +808,8 @@ validate_bucket_type_specific_params(CommonParams, Params, membase, IsNew,
          parse_validate_replica_index(Params, ReplicasNumResult, IsNew),
          parse_validate_threads_number(Params, IsNew),
          parse_validate_eviction_policy(Params, IsNew),
-         quota_size_error(CommonParams, membase, IsNew, BucketConfig)
+         quota_size_error(CommonParams, membase, IsNew, BucketConfig),
+         get_storage_mode(Params, IsNew)
          | validate_bucket_auto_compaction_settings(Params)],
 
     get_conflict_resolution_type_and_thresholds(Params, BucketConfig, IsNew)
@@ -967,6 +971,19 @@ validate_replicas_number(Params, IsNew) ->
       undefined,
       IsNew,
       fun parse_validate_replicas_number/1).
+
+get_storage_mode(Params, true = IsNew) ->
+    validate_with_missing(proplists:get_value("storageMode", Params),
+                          "couchstore",
+                          IsNew,
+                          fun parse_validate_storage_mode/1);
+get_storage_mode(Params, false = _IsNew) ->
+    case proplists:get_value("storageMode", Params) of
+        undefined ->
+            ignore;
+        _Val ->
+            {error, storageMode, <<"Storage mode not allowed in update bucket">>}
+    end.
 
 get_conflict_resolution_type_and_thresholds(Params, _BucketConfig, true = IsNew) ->
     case proplists:get_value("conflictResolutionType", Params) of
@@ -1209,6 +1226,13 @@ parse_validate_eviction_policy("fullEviction") ->
 parse_validate_eviction_policy(_Other) ->
     {error, evictionPolicy,
      <<"Eviction policy must be either 'valueOnly' or 'fullEviction'">>}.
+
+parse_validate_storage_mode("couchstore") ->
+    {ok, storage_mode, couchstore};
+parse_validate_storage_mode("ephemeral") ->
+    {ok, storage_mode, ephemeral};
+parse_validate_storage_mode(_Other) ->
+    {error, storageMode, <<"Storage mode must be either 'couchstore' or 'ephemeral'">>}.
 
 parse_validate_drift_ahead_threshold(Threshold) ->
     case menelaus_util:parse_validate_number(Threshold, 100, undefined) of
