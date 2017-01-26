@@ -4,6 +4,7 @@ import os, sys, getopt, urllib2, urllib, json
 from urllib2 import HTTPError
 
 valid_bucket_types = ["membase", "memcached"]
+valid_storage_modes = ["couchstore", "ephemeral"]
 valid_service_types = {"kv", "n1ql", "index", "fts", "example"}
 
 def usage():
@@ -13,6 +14,7 @@ def usage():
             -s <memory size (min 256) default: 256\n\
             -I <index memory size> default: 256\n\
             -t <bucket type> (membase, memcached) default: membase\n\
+            -M <storage mode> (couchstore, ephemeral) default: couchstore\n\
             -r <num replicas> (max 3) default: 1 (Only for membase buckets!)\n\
             -i (don't index replicas) default: replica index enabled\n\
             -S <start index> default: 0"
@@ -29,13 +31,14 @@ class PasswordManager(urllib2.HTTPPasswordMgr):
 def main():
     try:
         opts, args = getopt.getopt(sys.argv[1:],
-                                   "n:t:s:r:iS:T:I:", ["dont-rebalance"])
+                                   "n:t:M:s:r:iS:T:I:", ["dont-rebalance"])
     except getopt.GetoptError, err:
         print str(err)
         usage()
         sys.exit()
     nodes = 0
     buckettype = "membase"
+    storagemode = "couchstore"
     memsize = 256
     indexmemsize = 256
     replicas = 1
@@ -50,6 +53,8 @@ def main():
             nodes = int(a)
         elif o == "-t":
             buckettype = a
+        elif o == "-M":
+            storagemode = a
         elif o == "-s":
             memsize = a
         elif o == "-I":
@@ -80,6 +85,7 @@ def main():
 
     deploy["n0"] = deploy.get("n0", []) + ["kv"]
     if nodes == 0 or buckettype not in valid_bucket_types or \
+            storagemode not in valid_storage_modes or \
             int(memsize) < 256 or int(replicas) > 3 or \
             not set(deploy.keys()) <= set(["n" + str(i) for i in range(nodes)]) or \
             not set(reduce(lambda x,y:x+y, deploy.values(), [])) <= valid_service_types:
@@ -90,11 +96,11 @@ def main():
     handler = urllib2.HTTPBasicAuthHandler(password_mgr)
     o = urllib2.build_opener(handler)
 
-    print "Connecting {0} nodes, bucket type {1}, mem size {2} " \
+    print "Connecting {0} nodes, bucket type {1}, storage {6}, mem size {2} " \
         "with {3} replica copies, start index {4}, password asdasd, "\
         "deployment plan {5}\n".format(nodes, buckettype,
                                    memsize, replicas, start_index,
-                                   str(deploy))
+                                   str(deploy), storagemode)
 
     base_port = 9000 + start_index
 
@@ -110,6 +116,7 @@ def main():
            "&authType=sasl" +
            "&saslPassword=" +
            "&bucketType=" + buckettype +
+           "&storageMode=" + storagemode +
            "&ramQuotaMB=" + str(memsize) +
            "&replicaNumber=" + str(replicas) +
            "&replicaIndex=" + bool_request_value(replica_index)).read()
